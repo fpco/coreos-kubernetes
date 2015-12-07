@@ -12,8 +12,7 @@ import (
 )
 
 var (
-	Duration90d  = time.Hour * 24 * 90
-	Duration365d = time.Hour * 24 * 365
+	Duration5y = time.Hour * 24 * 365 * 5
 )
 
 type CACertConfig struct {
@@ -42,7 +41,7 @@ func NewSelfSignedCACertificate(cfg CACertConfig, key *rsa.PrivateKey) (*x509.Ce
 			Organization: []string{cfg.Organization},
 		},
 		NotBefore:             now.UTC(),
-		NotAfter:              now.Add(Duration365d).UTC(),
+		NotAfter:              now.Add(Duration5y).UTC(),
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
 		IsCA: true,
@@ -75,7 +74,7 @@ func NewSignedServerCertificate(cfg ServerCertConfig, key *rsa.PrivateKey, caCer
 		IPAddresses:  ips,
 		SerialNumber: serial,
 		NotBefore:    caCert.NotBefore,
-		NotAfter:     time.Now().Add(Duration90d).UTC(),
+		NotAfter:     time.Now().Add(Duration5y).UTC(),
 		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
@@ -106,7 +105,7 @@ func NewSignedClientCertificate(cfg ClientCertConfig, key *rsa.PrivateKey, caCer
 		IPAddresses:  ips,
 		SerialNumber: serial,
 		NotBefore:    caCert.NotBefore,
-		NotAfter:     time.Now().Add(Duration90d).UTC(),
+		NotAfter:     time.Now().Add(Duration5y).UTC(),
 		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
