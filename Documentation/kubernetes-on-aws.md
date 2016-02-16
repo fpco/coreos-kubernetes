@@ -9,15 +9,15 @@ Choose one of the following paths to get started:
 
 1. `kube-aws`
 
-	Use the `kube-aws` CLI tool to automate cluster deployment. See the [kube-aws Quickstart section](#kube-aws-quickstart) below.
+        Use the `kube-aws` CLI tool to automate cluster deployment. See the [kube-aws Quickstart section](#kube-aws-quickstart) below.
 
-2. Launch Stack & Configuration Guide
+1. Launch Stack & Configuration Guide
 
-	Click the following Launch Stack button, then use the [Configuration Guide](#cloudformation-template-parameters) later in this document to decide how to set the CloudFormation template parameters:
+        Click the following Launch Stack button, then use the [Configuration Guide](#cloudformation-template-parameters) later in this document to decide how to set the CloudFormation template parameters:
 
-	<a href="https://console.aws.amazon.com/cloudformation/home#/stacks/new?templateURL=https:%2F%2Fcoreos-kubernetes.s3.amazonaws.com%2Flatest%2Ftemplate.json" target="_blank">
-	<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png" alt="Launch Stack">
-	</a>
+        <a href="https://console.aws.amazon.com/cloudformation/home#/stacks/new?templateURL=https:%2F%2Fcoreos-kubernetes.s3.amazonaws.com%2Flatest%2Ftemplate.json" target="_blank">
+        <img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png" alt="Launch Stack">
+        </a>
 
 ## kube-aws Quickstart
 
@@ -26,8 +26,8 @@ Choose one of the following paths to get started:
 The latest releases of `kube-aws` for Linux and OS X are published through GitHub.
 Find the [latest release][latest-release] and download the appropriate release artifact (i.e. not "Source Code"), then extract the kube-aws binary from the downloaded `<file>` like so:
 
-```
-tar -xf <file> kube-aws
+```sh
+$ tar -xf <file> kube-aws
 ```
 
 [latest-release]: https://github.com/coreos/coreos-kubernetes/releases/latest
@@ -38,29 +38,29 @@ Configure your local workstation with AWS credentials using one of the following
 
 1. Environment Variables
 
-	Set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to the values of your AWS access and secret keys, respectively:
-	
-	```
-	export AWS_ACCESS_KEY_ID=AKID1234567890
-	export AWS_SECRET_ACCESS_KEY=MY-SECRET-KEY
-	```	
+        Set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to the values of your AWS access and secret keys, respectively:
 
-2. Config File
+        ```
+        export AWS_ACCESS_KEY_ID=AKID1234567890
+        export AWS_SECRET_ACCESS_KEY=MY-SECRET-KEY
+        ```
 
-	Write your credentials into the file `~/.aws/credentials` using the following template:
-	
-	```
-	[default]
-	aws_access_key_id = AKID1234567890
-	aws_secret_access_key = MY-SECRET-KEY
-	```
+1. Config File
+
+        Write your credentials into the file `~/.aws/credentials` using the following template:
+
+        ```
+        [default]
+        aws_access_key_id = AKID1234567890
+        aws_secret_access_key = MY-SECRET-KEY
+        ```
 
 ### Configure Cluster
 
 Create a local `cluster.yaml` config file, using the [example available on GitHub][cluster-yaml-example] as a starting point.
 
-```
-curl --silent --location https://raw.githubusercontent.com/coreos/coreos-kubernetes/master/multi-node/aws/cluster.yaml.example > cluster.yaml
+```sh
+$ curl --silent --location https://raw.githubusercontent.com/coreos/coreos-kubernetes/master/multi-node/aws/cluster.yaml.example > cluster.yaml
 ```
 
 Edit the file, setting any necessary options according to the [Configuration Guide](#kube-aws-cluster-config).
@@ -77,13 +77,13 @@ Once the AWS resources are created, Kubernetes will start up automatically.
 Each component certificate is only valid for 90 days, while the CA is valid for 365 days.
 If deploying a production Kubernetes cluster, consider establishing PKI independently of this tool first.
 
-Navigate to the DNS registrar hosting the zone for the provided external DNS name and ensure a single A record exists, routing the value of `externalDNSName` defined in `cluster.yaml` to the externally-accessible IP of the controller instance.
+Navigate to the DNS registrar hosting the zone for the provided external DNS name and ensure a single A record exists, routing the value of `externalDNSName` defined in `cluster.yaml` to the externally-accessible IP of the master node instance.
 You may use `kube-aws status` to get this value after cluster creation, if necessary.
 
 A kubectl config file will be written to `./clusters/<cluster-name>/kubeconfig`, which can be used to interact with your Kubernetes cluster like so:
 
-```
-kubectl --kubeconfig=clusters/<cluster-name>/kubeconfig get nodes
+```sh
+$ kubectl --kubeconfig=clusters/<cluster-name>/kubeconfig get nodes
 ```
 
 ### Destroy
@@ -98,7 +98,7 @@ This includes the certificate authority, signed server certificates for the Kube
 The API server certificate will be valid for the value of `externalDNSName`, as well as a the DNS names used to route Kubernetes API requests inside the cluster.
 
 `kube-aws` does *not* manage a DNS zone for the cluster.
-This means that the deployer is responsible for ensuring the routability of the external DNS name to the public IP of the controller instance.
+This means that the deployer is responsible for ensuring the routability of the external DNS name to the public IP of the master node instance.
 
 After generating the necessary TLS infrastructure, `kube-aws` creates a new CloudFormation, pointing to a CloudFormation template managed by this project.
 The CloudFormation template encompasses everything necessary to deploy the cluster.
@@ -126,7 +126,7 @@ This will be used to identify all AWS resources that make the cluster, and must 
 
 #### region
 
-Deploy the CloudFormation stack into a specific region.
+Deploy the CloudFormation stack into a specific EC2 region, for example "us-east-1". You can see the regions, along with their canonical names, in the [AWS Documentation](http://docs.aws.amazon.com/general/latest/gr/rande.html#ec2_region)
 
 #### availabilityZone
 
@@ -135,8 +135,7 @@ If not set, a zone will be chosen for you in the region being used to deploy the
 
 #### keyName
 
-Decide what SSH keypair to authorize across all instances in the cluster.
-The value of this field is the name of a keypair already loaded into the AWS account in use.
+Decide what SSH keypair to authorize across all instances in the cluster.  The value of this field is the name of a keypair already loaded into the AWS account in use. You can see instructions about how to generate or import a keypair into AWS in the [AWS Documentation](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html).
 
 #### workerCount
 
@@ -150,7 +149,8 @@ The coreos-kubernetes artifacts are available at a default location, but the loc
 #### externalDNSName
 
 This DNS name is assumed to be routable from outside the cluster to the Kubernetes API.
-It is automatically added as a Subject Alternative Names (SANs) to the kube-apiserver TLS certificate.
+It is automatically added as a Subject Alternative Names (SANs) to the kube-apiserver TLS certificate. You may not know the IP you want to associate with the name to start with - once your cluster is up and running, you can get the IP you'll need to configure your DNS with `kube-aws status`.
+
 
 ### CloudFormation Template Parameters
 
@@ -173,7 +173,7 @@ The value of this field is the name of a keypair already loaded into the AWS acc
 
 #### ControllerInstanceType, WorkerInstanceType
 
-These fields are the names of the EC2 instance types to use for the controller and worker instances, respectively.
+These fields are the names of the EC2 instance types to use for the master node and worker node instances, respectively.
 It is recommended that instances have 3GB+ of RAM.
 More resources allocated to the worker instances directly increases the scheduleable capacity of the Kubernetes cluster.
 

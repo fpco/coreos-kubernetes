@@ -10,22 +10,22 @@ export K8S_VER=v1.1.2
 # The CIDR network to use for pod IPs.
 # Each pod launched in the cluster will be assigned an IP out of this range.
 # Each node will be configured such that these IPs will be routable using the flannel overlay network.
-export POD_NETWORK=172.21.0.0/16
+export POD_NETWORK=
 
 # The CIDR network to use for service cluster IPs.
 # Each service will be assigned a cluster IP out of this range.
 # This must not overlap with any IP ranges assigned to the POD_NETWORK, or other existing network infrastructure.
 # Routing to these IPs is handled by a proxy service local to each node, and are not required to be routable between nodes.
-export SERVICE_IP_RANGE=172.22.0.0/24
+export SERVICE_IP_RANGE=
 
 # The IP address of the Kubernetes API Service
 # If the SERVICE_IP_RANGE is changed above, this must be set to the first IP in that range.
-export K8S_SERVICE_IP=172.22.0.1
+export K8S_SERVICE_IP=
 
 # The IP address of the cluster DNS service.
 # This IP must be in the range of the SERVICE_IP_RANGE and cannot be the first IP in the range.
 # This same IP must be configured on all worker nodes to enable DNS service discovery.
-export DNS_SERVICE_IP=172.22.0.10
+export DNS_SERVICE_IP=
 
 # The HTTP(S) host serving the necessary Kubernetes artifacts
 export ARTIFACT_URL=
@@ -101,8 +101,7 @@ ExecStart=/usr/bin/kubelet \
   --allow-privileged=true \
   --config=/etc/kubernetes/manifests \
   --cluster_dns=${DNS_SERVICE_IP} \
-  --cluster_domain=cluster.local \
-  --cadvisor-port=0
+  --cluster_domain=cluster.local
 Restart=always
 RestartSec=10
 
@@ -123,6 +122,11 @@ EOF
 	template manifests/cluster/kube-system.json /srv/kubernetes/manifests/kube-system.json
 	template manifests/cluster/kube-dns-rc.json /srv/kubernetes/manifests/kube-dns-rc.json
 	template manifests/cluster/kube-dns-svc.json /srv/kubernetes/manifests/kube-dns-svc.json
+
+	template manifests/cluster/heapster-rc.json /srv/kubernetes/manifests/heapster-rc.json
+	template manifests/cluster/heapster-svc.json /srv/kubernetes/manifests/heapster-svc.json
+	template manifests/cluster/influxdb-rc.json /srv/kubernetes/manifests/influxdb-rc.json
+	template manifests/cluster/influxdb-svc.json /srv/kubernetes/manifests/influxdb-svc.json
 
 	local TEMPLATE=/etc/flannel/options.env
 	[ -f $TEMPLATE ] || {
@@ -168,6 +172,13 @@ function start_addons {
 	echo "K8S: DNS addon"
 	curl --silent -XPOST -d"$(cat /srv/kubernetes/manifests/kube-dns-rc.json)" "http://127.0.0.1:8080/api/v1/namespaces/kube-system/replicationcontrollers" > /dev/null
 	curl --silent -XPOST -d"$(cat /srv/kubernetes/manifests/kube-dns-svc.json)" "http://127.0.0.1:8080/api/v1/namespaces/kube-system/services" > /dev/null
+
+	echo "K8S: Monitoring addon"
+	curl --silent -XPOST -d"$(cat /srv/kubernetes/manifests/heapster-svc.json)" "http://127.0.0.1:8080/api/v1/namespaces/kube-system/services" > /dev/null
+	curl --silent -XPOST -d"$(cat /srv/kubernetes/manifests/influxdb-svc.json)" "http://127.0.0.1:8080/api/v1/namespaces/kube-system/services" > /dev/null
+	curl --silent -XPOST -d"$(cat /srv/kubernetes/manifests/heapster-rc.json)" "http://127.0.0.1:8080/api/v1/namespaces/kube-system/replicationcontrollers" > /dev/null
+	curl --silent -XPOST -d"$(cat /srv/kubernetes/manifests/influxdb-rc.json)" "http://127.0.0.1:8080/api/v1/namespaces/kube-system/replicationcontrollers" > /dev/null
+
 }
 
 init_config

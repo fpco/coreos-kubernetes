@@ -14,7 +14,7 @@ export K8S_VER=v1.1.2
 
 # The IP address of the cluster DNS service.
 # This must be the same DNS_SERVICE_IP used when configuring the controller nodes.
-export DNS_SERVICE_IP=172.22.0.10
+export DNS_SERVICE_IP=
 
 # The HTTP(S) host serving the necessary Kubernetes artifacts
 export ARTIFACT_URL=
@@ -85,10 +85,10 @@ ExecStart=/usr/bin/kubelet \
   --config=/etc/kubernetes/manifests \
   --cluster_dns=${DNS_SERVICE_IP} \
   --cluster_domain=cluster.local \
+  --cloud-provider=aws \
   --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
   --tls-cert-file=/etc/kubernetes/ssl/worker.pem \
-  --tls-private-key-file=/etc/kubernetes/ssl/worker-key.pem \
-  --cadvisor-port=0
+  --tls-private-key-file=/etc/kubernetes/ssl/worker-key.pem
 Restart=always
 RestartSec=10
 [Install]

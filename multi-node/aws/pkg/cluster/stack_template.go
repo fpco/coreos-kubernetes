@@ -42,15 +42,24 @@ const (
 	parWorkerKey                    = "WorkerKey"
 	parWorkerCount                  = "WorkerCount"
 	parNameWorkerRootVolumeSize     = "WorkerRootVolumeSize"
+	parWorkerSpotPrice              = "WorkerSpotPrice"
 	parAvailabilityZone             = "AvailabilityZone"
+	parVPCCIDR                      = "VPCCIDR"
+	parInstanceCIDR                 = "InstanceCIDR"
+	parControllerIP                 = "ControllerIP"
+	parServiceCIDR                  = "ServiceCIDR"
+	parPodCIDR                      = "PodCIDR"
+	parKubernetesServiceIP          = "KubernetesServiceIP"
+	parDNSServiceIP                 = "DNSServiceIP"
 )
 
 var (
-	supportedChannels    = []string{"alpha"}
+	supportedChannels    = []string{"alpha", "beta"}
 	tagKubernetesCluster = "KubernetesCluster"
 
-	sgProtoTCP = "tcp"
-	sgProtoUDP = "udp"
+	sgProtoTCP  = "tcp"
+	sgProtoUDP  = "udp"
+	sgProtoICMP = "icmp"
 
 	sgPortMax = 65535
 	sgAllIPs  = "0.0.0.0/0"
@@ -142,7 +151,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 	res[resNameVPC] = map[string]interface{}{
 		"Type": "AWS::EC2::VPC",
 		"Properties": map[string]interface{}{
-			"CidrBlock":          "172.20.0.0/16",
+			"CidrBlock":          newRef(parVPCCIDR),
 			"EnableDnsSupport":   true,
 			"EnableDnsHostnames": true,
 			"InstanceTenancy":    "default",
@@ -196,7 +205,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 		"Type": "AWS::EC2::Subnet",
 		"Properties": map[string]interface{}{
 			"AvailabilityZone":    availabilityZone,
-			"CidrBlock":           "172.20.0.0/24",
+			"CidrBlock":           newRef(parInstanceCIDR),
 			"MapPublicIpOnLaunch": true,
 			"VpcId":               newRef(resNameVPC),
 			"Tags": []map[string]interface{}{
@@ -223,6 +232,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 				map[string]interface{}{"IpProtocol": sgProtoUDP, "FromPort": 0, "ToPort": sgPortMax, "CidrIp": sgAllIPs},
 			},
 			"SecurityGroupIngress": []map[string]interface{}{
+				map[string]interface{}{"IpProtocol": sgProtoICMP, "FromPort": 3, "ToPort": -1, "CidrIp": sgAllIPs},
 				map[string]interface{}{"IpProtocol": sgProtoTCP, "FromPort": 22, "ToPort": 22, "CidrIp": sgAllIPs},
 				map[string]interface{}{"IpProtocol": sgProtoTCP, "FromPort": 443, "ToPort": 443, "CidrIp": sgAllIPs},
 			},
@@ -252,6 +262,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 				map[string]interface{}{"IpProtocol": sgProtoUDP, "FromPort": 0, "ToPort": sgPortMax, "CidrIp": sgAllIPs},
 			},
 			"SecurityGroupIngress": []map[string]interface{}{
+				map[string]interface{}{"IpProtocol": sgProtoICMP, "FromPort": 3, "ToPort": -1, "CidrIp": sgAllIPs},
 				map[string]interface{}{"IpProtocol": sgProtoTCP, "FromPort": 22, "ToPort": 22, "CidrIp": sgAllIPs},
 			},
 			"Tags": []map[string]interface{}{
@@ -269,6 +280,16 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 			"IpProtocol":            sgProtoUDP,
 		},
 	}
+	res[resNameSecurityGroupWorker+"IngressFromWorkerToKubeletReadOnly"] = map[string]interface{}{
+		"Type": "AWS::EC2::SecurityGroupIngress",
+		"Properties": map[string]interface{}{
+			"GroupId":               newRef(resNameSecurityGroupWorker),
+			"SourceSecurityGroupId": newRef(resNameSecurityGroupWorker),
+			"FromPort":              10255,
+			"ToPort":                10255,
+			"IpProtocol":            sgProtoTCP,
+		},
+	}
 	res[resNameSecurityGroupWorker+"IngressFromControllerToFlannel"] = map[string]interface{}{
 		"Type": "AWS::EC2::SecurityGroupIngress",
 		"Properties": map[string]interface{}{
@@ -277,6 +298,16 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 			"FromPort":              8285,
 			"ToPort":                8285,
 			"IpProtocol":            sgProtoUDP,
+		},
+	}
+	res[resNameSecurityGroupWorker+"IngressFromControllerTocAdvisor"] = map[string]interface{}{
+		"Type": "AWS::EC2::SecurityGroupIngress",
+		"Properties": map[string]interface{}{
+			"GroupId":               newRef(resNameSecurityGroupWorker),
+			"SourceSecurityGroupId": newRef(resNameSecurityGroupController),
+			"FromPort":              4194,
+			"ToPort":                4194,
+			"IpProtocol":            sgProtoTCP,
 		},
 	}
 	res[resNameSecurityGroupWorker+"IngressFromControllerToKubelet"] = map[string]interface{}{
@@ -393,7 +424,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 			"IamInstanceProfile": newRef(resNameIAMInstanceProfileController),
 			"NetworkInterfaces": []map[string]interface{}{
 				map[string]interface{}{
-					"PrivateIpAddress":         "172.20.0.50",
+					"PrivateIpAddress":         newRef(parControllerIP),
 					"AssociatePublicIpAddress": false,
 					"DeleteOnTermination":      true,
 					"DeviceIndex":              "0",
@@ -468,6 +499,13 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 					"Ebs": map[string]interface{}{
 						"VolumeSize": newRef(parNameWorkerRootVolumeSize),
 					},
+				},
+			},
+			"SpotPrice": map[string]interface{}{
+				"Fn::If": []interface{}{
+					"UseWorkerSpotInstances",
+					newRef(parWorkerSpotPrice),
+					newRef("AWS::NoValue"),
 				},
 			},
 		},
@@ -573,10 +611,58 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 		"Description": "Worker root volume size (GiB)",
 	}
 
+	par[parWorkerSpotPrice] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     "",
+		"Description": "Spot instance price for workers (optional, omit for on-demand instances)",
+	}
+
 	par[parAvailabilityZone] = map[string]interface{}{
 		"Type":        "String",
 		"Default":     "",
-		"Description": "Specific availability zone",
+		"Description": "Specific availability zone (optional)",
+	}
+
+	par[parVPCCIDR] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     DefaultVPCCIDR,
+		"Description": "CIDR for Kubernetes vpc",
+	}
+
+	par[parInstanceCIDR] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     DefaultInstanceCIDR,
+		"Description": "CIDR for Kubernetes subnet",
+	}
+
+	par[parControllerIP] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     DefaultControllerIP,
+		"Description": "IP address for controller in Kubernetes subnet",
+	}
+
+	par[parServiceCIDR] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     DefaultServiceCIDR,
+		"Description": "CIDR for all service IP addresses",
+	}
+
+	par[parPodCIDR] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     DefaultPodCIDR,
+		"Description": "CIDR for all pod IP addresses",
+	}
+
+	par[parKubernetesServiceIP] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     DefaultKubernetesServiceIP,
+		"Description": "IP address for Kubernetes controller service (must be contained by serviceCIDR)",
+	}
+
+	par[parDNSServiceIP] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     DefaultDNSServiceIP,
+		"Description": "IP address of the Kubernetes DNS service (must be contained by serviceCIDR)",
 	}
 
 	regionMap, err := getRegionMap()
@@ -594,6 +680,16 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 			"Fn::Equals": []interface{}{
 				newRef(parAvailabilityZone),
 				"",
+			},
+		},
+		"UseWorkerSpotInstances": map[string]interface{}{
+			"Fn::Not": []interface{}{
+				map[string]interface{}{
+					"Fn::Equals": []interface{}{
+						newRef(parWorkerSpotPrice),
+						"",
+					},
+				},
 			},
 		},
 	}
