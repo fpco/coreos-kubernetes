@@ -228,6 +228,22 @@ func (c *Cluster) Create(tlsConfig *TLSConfig) error {
 		})
 	}
 
+	if c.cfg.ExistingVPC != "" {
+		parameters = append(parameters, &cloudformation.Parameter{
+			ParameterKey:     aws.String(parExistingVPC),
+			ParameterValue:   aws.String(c.cfg.ExistingVPC),
+			UsePreviousValue: aws.Bool(true),
+		})
+	}
+
+	if c.cfg.ExistingInternetGateway != "" {
+		parameters = append(parameters, &cloudformation.Parameter{
+			ParameterKey:     aws.String(parExistingInternetGateway),
+			ParameterValue:   aws.String(c.cfg.ExistingInternetGateway),
+			UsePreviousValue: aws.Bool(true),
+		})
+	}
+
 	tmplURL := fmt.Sprintf("%s/template.json", c.cfg.ArtifactURL)
 	return createStackAndWait(cloudformation.New(c.aws), c.stackName(), tmplURL, parameters)
 }

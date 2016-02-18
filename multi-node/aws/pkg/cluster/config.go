@@ -11,13 +11,16 @@ import (
 )
 
 const (
-	DefaultVPCCIDR             = "10.0.0.0/16"
-	DefaultInstanceCIDR        = "10.0.0.0/24"
-	DefaultControllerIP        = "10.0.0.50"
-	DefaultPodCIDR             = "10.2.0.0/16"
-	DefaultServiceCIDR         = "10.3.0.0/24"
-	DefaultKubernetesServiceIP = "10.3.0.1"
-	DefaultDNSServiceIP        = "10.3.0.10"
+	DefaultVPCCIDR             = "172.20.0.0/16"
+	DefaultInstanceCIDR        = "172.20.0.0/24"
+	DefaultControllerIP        = "172.20.0.50"
+	DefaultPodCIDR             = "172.22.0.0/16"
+	DefaultServiceCIDR         = "172.23.0.0/24"
+	DefaultKubernetesServiceIP = "172.23.0.1"
+	DefaultDNSServiceIP        = "172.23.0.10"
+	DefaultExistingVPC         = ""
+	DefaultExistingInternetGateway = ""
+	DefaultOnlyCreateVPC       = "false"
 )
 
 var (
@@ -45,6 +48,8 @@ type Config struct {
 	ServiceCIDR              string `yaml:"serviceCIDR"`
 	KubernetesServiceIP      string `yaml:"kubernetesServiceIP"`
 	DNSServiceIP             string `yaml:"dnsServiceIP"`
+	ExistingVPC              string `yaml:"existingVPC"`
+	ExistingInternetGateway  string `yaml:"existingInternetGateway"`
 }
 
 func (cfg *Config) Valid() error {
@@ -161,6 +166,8 @@ func NewDefaultConfig(ver string) *Config {
 		ServiceCIDR:         DefaultServiceCIDR,
 		KubernetesServiceIP: DefaultKubernetesServiceIP,
 		DNSServiceIP:        DefaultDNSServiceIP,
+		ExistingVPC:         DefaultExistingVPC,
+		ExistingInternetGateway: DefaultExistingInternetGateway,
 	}
 }
 

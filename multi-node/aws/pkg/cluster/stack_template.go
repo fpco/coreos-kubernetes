@@ -51,6 +51,9 @@ const (
 	parPodCIDR                      = "PodCIDR"
 	parKubernetesServiceIP          = "KubernetesServiceIP"
 	parDNSServiceIP                 = "DNSServiceIP"
+	parExistingVPC                  = "ExistingVPC"
+	parExistingInternetGateway      = "ExistingInternetGateway"
+	parOnlyCreateVPC                = "OnlyCreateVPC"
 )
 
 var (
@@ -146,10 +149,27 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 		},
 	}
 
+	vpc := map[string]interface{}{
+		"Fn::If": []interface{}{
+			"CreateVPC",
+			newRef(resNameVPC),
+			newRef(parExistingVPC),
+		},
+	}
+
+	internetGateway := map[string]interface{}{
+		"Fn::If": []interface{}{
+			"CreateVPC",
+			newRef(resNameInternetGateway),
+			newRef(parExistingInternetGateway),
+		},
+	}
+
 	res := make(map[string]interface{})
 
 	res[resNameVPC] = map[string]interface{}{
 		"Type": "AWS::EC2::VPC",
+		"Condition": "CreateVPC",
 		"Properties": map[string]interface{}{
 			"CidrBlock":          newRef(parVPCCIDR),
 			"EnableDnsSupport":   true,
@@ -167,6 +187,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameInternetGateway] = map[string]interface{}{
 		"Type": "AWS::EC2::InternetGateway",
+		"Condition": "CreateVPC",
 		"Properties": map[string]interface{}{
 			"Tags": []map[string]interface{}{
 				newTag(tagKubernetesCluster, newRef(parClusterName)),
@@ -176,16 +197,18 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameVPCGatewayAttachment] = map[string]interface{}{
 		"Type": "AWS::EC2::VPCGatewayAttachment",
+		"Condition": "CreateVPC",
 		"Properties": map[string]interface{}{
-			"InternetGatewayId": newRef(resNameInternetGateway),
-			"VpcId":             newRef(resNameVPC),
+			"InternetGatewayId": internetGateway,
+			"VpcId":             vpc,
 		},
 	}
 
 	res[resNameRouteTable] = map[string]interface{}{
 		"Type": "AWS::EC2::RouteTable",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
-			"VpcId": newRef(resNameVPC),
+			"VpcId": vpc,
 			"Tags": []map[string]interface{}{
 				newTag(tagKubernetesCluster, newRef(parClusterName)),
 			},
@@ -194,20 +217,22 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameRouteToInternet] = map[string]interface{}{
 		"Type": "AWS::EC2::Route",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"DestinationCidrBlock": "0.0.0.0/0",
 			"RouteTableId":         newRef(resNameRouteTable),
-			"GatewayId":            newRef(resNameInternetGateway),
+			"GatewayId":            internetGateway,
 		},
 	}
 
 	res[resNameSubnet] = map[string]interface{}{
 		"Type": "AWS::EC2::Subnet",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"AvailabilityZone":    availabilityZone,
 			"CidrBlock":           newRef(parInstanceCIDR),
 			"MapPublicIpOnLaunch": true,
-			"VpcId":               newRef(resNameVPC),
+			"VpcId":               vpc,
 			"Tags": []map[string]interface{}{
 				newTag(tagKubernetesCluster, newRef(parClusterName)),
 			},
@@ -216,6 +241,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameSubnetRouteTableAssociation] = map[string]interface{}{
 		"Type": "AWS::EC2::SubnetRouteTableAssociation",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"RouteTableId": newRef(resNameRouteTable),
 			"SubnetId":     newRef(resNameSubnet),
@@ -224,9 +250,10 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameSecurityGroupController] = map[string]interface{}{
 		"Type": "AWS::EC2::SecurityGroup",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"GroupDescription": newRef("AWS::StackName"),
-			"VpcId":            newRef(resNameVPC),
+			"VpcId":            vpc,
 			"SecurityGroupEgress": []map[string]interface{}{
 				map[string]interface{}{"IpProtocol": sgProtoTCP, "FromPort": 0, "ToPort": sgPortMax, "CidrIp": sgAllIPs},
 				map[string]interface{}{"IpProtocol": sgProtoUDP, "FromPort": 0, "ToPort": sgPortMax, "CidrIp": sgAllIPs},
@@ -243,6 +270,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 	}
 	res[resNameSecurityGroupController+"IngressFromWorkerToEtcd"] = map[string]interface{}{
 		"Type": "AWS::EC2::SecurityGroupIngress",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"GroupId":               newRef(resNameSecurityGroupController),
 			"SourceSecurityGroupId": newRef(resNameSecurityGroupWorker),
@@ -254,9 +282,10 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameSecurityGroupWorker] = map[string]interface{}{
 		"Type": "AWS::EC2::SecurityGroup",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"GroupDescription": newRef("AWS::StackName"),
-			"VpcId":            newRef(resNameVPC),
+			"VpcId":            vpc,
 			"SecurityGroupEgress": []map[string]interface{}{
 				map[string]interface{}{"IpProtocol": sgProtoTCP, "FromPort": 0, "ToPort": sgPortMax, "CidrIp": sgAllIPs},
 				map[string]interface{}{"IpProtocol": sgProtoUDP, "FromPort": 0, "ToPort": sgPortMax, "CidrIp": sgAllIPs},
@@ -272,6 +301,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 	}
 	res[resNameSecurityGroupWorker+"IngressFromWorkerToFlannel"] = map[string]interface{}{
 		"Type": "AWS::EC2::SecurityGroupIngress",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"GroupId":               newRef(resNameSecurityGroupWorker),
 			"SourceSecurityGroupId": newRef(resNameSecurityGroupWorker),
@@ -282,6 +312,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 	}
 	res[resNameSecurityGroupWorker+"IngressFromWorkerToKubeletReadOnly"] = map[string]interface{}{
 		"Type": "AWS::EC2::SecurityGroupIngress",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"GroupId":               newRef(resNameSecurityGroupWorker),
 			"SourceSecurityGroupId": newRef(resNameSecurityGroupWorker),
@@ -292,6 +323,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 	}
 	res[resNameSecurityGroupWorker+"IngressFromControllerToFlannel"] = map[string]interface{}{
 		"Type": "AWS::EC2::SecurityGroupIngress",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"GroupId":               newRef(resNameSecurityGroupWorker),
 			"SourceSecurityGroupId": newRef(resNameSecurityGroupController),
@@ -302,6 +334,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 	}
 	res[resNameSecurityGroupWorker+"IngressFromControllerTocAdvisor"] = map[string]interface{}{
 		"Type": "AWS::EC2::SecurityGroupIngress",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"GroupId":               newRef(resNameSecurityGroupWorker),
 			"SourceSecurityGroupId": newRef(resNameSecurityGroupController),
@@ -312,6 +345,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 	}
 	res[resNameSecurityGroupWorker+"IngressFromControllerToKubelet"] = map[string]interface{}{
 		"Type": "AWS::EC2::SecurityGroupIngress",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"GroupId":               newRef(resNameSecurityGroupWorker),
 			"SourceSecurityGroupId": newRef(resNameSecurityGroupController),
@@ -323,6 +357,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameIAMRoleController] = map[string]interface{}{
 		"Type": "AWS::IAM::Role",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"AssumeRolePolicyDocument": map[string]interface{}{
 				"Version": "2012-10-17",
@@ -354,6 +389,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameIAMRoleWorker] = map[string]interface{}{
 		"Type": "AWS::IAM::Role",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"AssumeRolePolicyDocument": map[string]interface{}{
 				"Version": "2012-10-17",
@@ -386,6 +422,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameIAMInstanceProfileController] = map[string]interface{}{
 		"Type": "AWS::IAM::InstanceProfile",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"Path": "/",
 			"Roles": []map[string]interface{}{
@@ -396,6 +433,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameIAMInstanceProfileWorker] = map[string]interface{}{
 		"Type": "AWS::IAM::InstanceProfile",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"Path": "/",
 			"Roles": []map[string]interface{}{
@@ -406,6 +444,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameEIPController] = map[string]interface{}{
 		"Type": "AWS::EC2::EIP",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"InstanceId": newRef(resNameInstanceController),
 			"Domain":     "vpc",
@@ -414,6 +453,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameInstanceController] = map[string]interface{}{
 		"Type": "AWS::EC2::Instance",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"ImageId":      imageID,
 			"InstanceType": newRef(parNameControllerInstanceType),
@@ -452,6 +492,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameAlarmControllerRecover] = map[string]interface{}{
 		"Type": "AWS::CloudWatch::Alarm",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"AlarmDescription":   "Trigger a recovery when system check fails for 5 consecutive minutes.",
 			"Namespace":          "AWS/EC2",
@@ -484,6 +525,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameLaunchConfigurationWorker] = map[string]interface{}{
 		"Type": "AWS::AutoScaling::LaunchConfiguration",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"ImageId":      imageID,
 			"InstanceType": newRef(parNameWorkerInstanceType),
@@ -513,6 +555,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 
 	res[resNameAutoScaleWorker] = map[string]interface{}{
 		"Type": "AWS::AutoScaling::AutoScalingGroup",
+		"Condition": "CreateNonVPC",
 		"Properties": map[string]interface{}{
 			"AvailabilityZones":       []interface{}{availabilityZone},
 			"LaunchConfigurationName": newRef(resNameLaunchConfigurationWorker),
@@ -540,7 +583,7 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 	// TODO(silas): change default to stable once Kubernetes is supported
 	par[parNameReleaseChannel] = map[string]interface{}{
 		"Type":          "String",
-		"Default":       "alpha",
+		"Default":       "beta",
 		"AllowedValues": supportedChannels,
 		"Description":   "CoreOS Linux release channel to use as instance operating system",
 	}
@@ -665,6 +708,25 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 		"Description": "IP address of the Kubernetes DNS service (must be contained by serviceCIDR)",
 	}
 
+	par[parExistingVPC] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     DefaultExistingVPC,
+		"Description": "ID of an existing VPC to create the cluster in (optional)",
+	}
+
+	par[parExistingInternetGateway] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     DefaultExistingInternetGateway,
+		"Description": "ID of an existing internet gateway to use (required if existing VPC used)",
+	}
+
+	par[parOnlyCreateVPC] = map[string]interface{}{
+		"Type":        "String",
+		"Default":     DefaultOnlyCreateVPC,
+		"AllowedValues": []string{"false", "true"},
+		"Description": "If true, only create the VPC and the internet gateway (optional)",
+	}
+
 	regionMap, err := getRegionMap()
 
 	if err != nil {
@@ -690,6 +752,18 @@ func StackTemplateBody(defaultArtifactURL string) (string, error) {
 						"",
 					},
 				},
+			},
+		},
+		"CreateVPC": map[string]interface{}{
+			"Fn::Equals": []interface{}{
+				newRef(parExistingVPC),
+				"",
+			},
+		},
+		"CreateNonVPC": map[string]interface{}{
+			"Fn::Equals": []interface{}{
+				newRef(parOnlyCreateVPC),
+				"false",
 			},
 		},
 	}
